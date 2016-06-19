@@ -6,7 +6,8 @@ type backend string
 
 const (
 	KeychainBackend backend = "osxkeychain"
-	KWalletBackend backend = "kwallet"
+	KWalletBackend  backend = "kwallet"
+	FileBackend     backend = "file"
 )
 
 var supportedBackends = map[backend]opener{}
