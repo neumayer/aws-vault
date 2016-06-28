@@ -7,36 +7,16 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
-	"time"
-
-	jose "github.com/dvsekhvalnov/jose2go"
-	"golang.org/x/crypto/ssh/terminal"
 )
-
-type passwordFunc func(string) (string, error)
-
-func terminalPrompt(prompt string) (string, error) {
-	fmt.Printf("%s: ", prompt)
-	b, err := terminal.ReadPassword(1)
-	if err != nil {
-		return "", err
-	}
-	fmt.Println()
-	return string(b), nil
-}
 
 func init() {
 	supportedBackends[FileBackend] = opener(func(name string) (Keyring, error) {
-		return &fileKeyring{
-			PasswordFunc: terminalPrompt,
-		}, nil
+		return &fileKeyring{}, nil
 	})
 }
 
 type fileKeyring struct {
-	Dir          string
-	PasswordFunc passwordFunc
-	password     string
+	Dir string
 }
 
 func (k *fileKeyring) dir() (string, error) {
@@ -59,23 +39,6 @@ func (k *fileKeyring) dir() (string, error) {
 	return dir, nil
 }
 
-func (k *fileKeyring) unlock() error {
-	dir, err := k.dir()
-	if err != nil {
-		return err
-	}
-
-	if k.password == "" {
-		pwd, err := k.PasswordFunc(fmt.Sprintf("Enter passphrase to unlock %s", dir))
-		if err != nil {
-			return err
-		}
-		k.password = pwd
-	}
-
-	return nil
-}
-
 func (k *fileKeyring) Get(key string) (Item, error) {
 	dir, err := k.dir()
 	if err != nil {
@@ -88,20 +51,10 @@ func (k *fileKeyring) Get(key string) (Item, error) {
 	} else if err != nil {
 		return Item{}, err
 	}
+	item := Item{}
+	err = json.Unmarshal(bytes, &item)
 
-	if err = k.unlock(); err != nil {
-		return Item{}, err
-	}
-
-	payload, _, err := jose.Decode(string(bytes), k.password)
-	if err != nil {
-		return Item{}, err
-	}
-
-	var decoded Item
-	err = json.Unmarshal([]byte(payload), &decoded)
-
-	return decoded, err
+	return item, err
 }
 
 func (k *fileKeyring) Set(i Item) error {
@@ -115,19 +68,7 @@ func (k *fileKeyring) Set(i Item) error {
 		return err
 	}
 
-	if err = k.unlock(); err != nil {
-		return err
-	}
-
-	token, err := jose.Encrypt(string(bytes), jose.PBES2_HS256_A128KW, jose.A256GCM, k.password,
-		jose.Headers(map[string]interface{}{
-			"created": time.Now().String(),
-		}))
-	if err != nil {
-		return err
-	}
-
-	return ioutil.WriteFile(filepath.Join(dir, i.Key), []byte(token), 0600)
+	return ioutil.WriteFile(filepath.Join(dir, i.Key), bytes, 0600)
 }
 
 func (k *fileKeyring) Remove(key string) error {
