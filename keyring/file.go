@@ -6,10 +6,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-	"time"
 
-	jose "github.com/dvsekhvalnov/jose2go"
-	"github.com/mitchellh/go-homedir"
 	"golang.org/x/crypto/ssh/terminal"
 )
 
@@ -64,17 +61,9 @@ func (k *fileKeyring) dir() (string, error) {
 }
 
 func (k *fileKeyring) unlock() error {
-	dir, err := k.dir()
+	_, err := k.dir()
 	if err != nil {
 		return err
-	}
-
-	if k.password == "" {
-		pwd, err := k.PasswordFunc(fmt.Sprintf("Enter passphrase to unlock %s", dir))
-		if err != nil {
-			return err
-		}
-		k.password = pwd
 	}
 
 	return nil
@@ -97,7 +86,7 @@ func (k *fileKeyring) Get(key string) (Item, error) {
 		return Item{}, err
 	}
 
-	payload, _, err := jose.Decode(string(bytes), k.password)
+	payload := string(bytes)
 	if err != nil {
 		return Item{}, err
 	}
@@ -123,13 +112,7 @@ func (k *fileKeyring) Set(i Item) error {
 		return err
 	}
 
-	token, err := jose.Encrypt(string(bytes), jose.PBES2_HS256_A128KW, jose.A256GCM, k.password,
-		jose.Headers(map[string]interface{}{
-			"created": time.Now().String(),
-		}))
-	if err != nil {
-		return err
-	}
+	token := string(bytes)
 
 	return ioutil.WriteFile(filepath.Join(dir, i.Key), []byte(token), 0600)
 }
